@@ -7,18 +7,17 @@ using System.Collections.Concurrent;
 
 public class HandDataReceiver : MonoBehaviour
 {
-    public string ip = "127.0.0.1";
+    public string ip = "localhost";
     public int port = 5005;
 
-    public Vector3 scale = new Vector3(10f, 10f, 10f);
+    public Vector3 scale = new Vector3(1f, 1f, 1f);
     public Vector3 offset = new Vector3(0f, 0f, 0f);
 
     public Transform rightHandRoot;
     public Transform leftHandRoot;
     public Transform[] rightHandJoints;
     public Transform[] leftHandJoints;
-    //public CustomHandController customHandController;
-
+    
 
     [Serializable]
     public class HandData
@@ -53,6 +52,13 @@ public class HandDataReceiver : MonoBehaviour
         networkThread = new Thread(NetworkThread);
         networkThread.IsBackground = true;
         networkThread.Start();
+
+        // Get reference to the LineRenderer component
+        lineRenderer = GetComponent<LineRenderer>();
+
+        // Set LineRenderer settings
+        lineRenderer.startWidth = 0.05f; // Adjust as needed
+        lineRenderer.endWidth = 0.05f;   // Adjust as needed
     }
 
     void Update()
@@ -61,7 +67,9 @@ public class HandDataReceiver : MonoBehaviour
         while (dataQueue.TryDequeue(out string data))
         {
             ProcessReceivedData(data);
+            // Update the line renderer positions
         }
+        
     }
 
     private void NetworkThread()
@@ -123,12 +131,36 @@ public class HandDataReceiver : MonoBehaviour
     {
         for (int i = 0; i < landmarks.Length && i < handJoints.Length; i++)
         {
-            Vector3 localPosition = new Vector3(landmarks[i].x, landmarks[i].y, landmarks[i].z) - new Vector3(0.5f, 0.5f, 0.5f);
+            Vector3 localPosition = new Vector3(landmarks[i].x, landmarks[i].y, landmarks[i].z) - handRoot.position;
             Vector3 adjustedPosition = Vector3.Scale(localPosition, scale) + offset;
+            
             handJoints[i].localPosition = adjustedPosition;
+
+            //Rotate to look at specific node depending on index
+            if (i < 5)
+            {
+                if (i > 0)
+                {
+                    Vector3 direction = handJoints[i - 1].position - handJoints[i].position;
+                    handJoints[i].rotation = Quaternion.LookRotation(direction, handRoot.up);
+                    lineRenderer.SetPosition(i, handJoints[i].position);
+                }
+            }
+            else
+            {
+                // Calculate index of the node to look back at
+                int lookBackIndex = i % 5;
+
+                // Calculate direction to the node to look back at
+                Vector3 direction = handJoints[lookBackIndex].position - handJoints[i].position;
+                handJoints[i].rotation = Quaternion.LookRotation(direction, handRoot.up);
+                lineRenderer.SetPosition(i, handJoints[i].position);
+            }
         }
     }
+    private void UpdateLineRendererPositions(){
 
+    }
     private void OnApplicationQuit()
     {
         stopThread = true;
