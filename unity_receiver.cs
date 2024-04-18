@@ -17,7 +17,8 @@ public class HandDataReceiver : MonoBehaviour
     public Transform leftHandRoot;
     public Transform[] rightHandJoints;
     public Transform[] leftHandJoints;
-    
+    public LineRenderer rightHandLineRenderer;
+    public LineRenderer leftHandLineRenderer;
 
     [Serializable]
     public class HandData
@@ -47,19 +48,28 @@ public class HandDataReceiver : MonoBehaviour
     private ConcurrentQueue<string> dataQueue = new ConcurrentQueue<string>();
     private bool stopThread = false;
 
+    private int[] path = {0,1,2,3,4,3,2,5,6,7,8,7,6,5,9,10,11,12,11,10,9,13,14,15,16,15,14,13,17,18,19,20,19,18,17,0};
+
     void Start()
     {
         networkThread = new Thread(NetworkThread);
         networkThread.IsBackground = true;
         networkThread.Start();
 
-        // Get reference to the LineRenderer component
-        lineRenderer = GetComponent<LineRenderer>();
-
-        // Set LineRenderer settings
-        lineRenderer.startWidth = 0.05f; // Adjust as needed
-        lineRenderer.endWidth = 0.05f;   // Adjust as needed
+        SetupLineRenderers();
+        // Initialize line renderer
     }
+
+    void SetupLineRenderers()
+    {
+        rightHandLineRenderer.positionCount = path.Length;
+        rightHandLineRenderer.startWidth = 0.01f;
+        rightHandLineRenderer.endWidth = 0.01f;
+
+        leftHandLineRenderer.positionCount = path.Length;
+        leftHandLineRenderer.startWidth = 0.01f;
+        leftHandLineRenderer.endWidth = 0.01f;
+    }   
 
     void Update()
     {
@@ -67,9 +77,7 @@ public class HandDataReceiver : MonoBehaviour
         while (dataQueue.TryDequeue(out string data))
         {
             ProcessReceivedData(data);
-            // Update the line renderer positions
         }
-        
     }
 
     private void NetworkThread()
@@ -89,8 +97,7 @@ public class HandDataReceiver : MonoBehaviour
                     if (!string.IsNullOrEmpty(data))
                     {
                         dataQueue.Enqueue(data);
-                        Debug.Log("Data received: " + data);//Debug
-
+                        Debug.Log("Data received: " + data); // Debug
                     }
                 }
             }
@@ -108,16 +115,15 @@ public class HandDataReceiver : MonoBehaviour
             var handsData = JsonUtility.FromJson<HandsLandmarksData>(data);
             Debug.Log("Processing hand data: " + handsData.hands[0].handedness);
 
-            // Use the landmarks and handedness to update the hand model positions
             foreach (var hand in handsData.hands)
             {
-                if(hand.handedness == "Right")
+                if (hand.handedness == "Right")
                 {
-                    UpdateHandModel(hand.landmarks, rightHandJoints, rightHandRoot);
+                    UpdateHandModel(hand.landmarks, rightHandJoints, rightHandRoot, rightHandLineRenderer);
                 }
-                else if(hand.handedness == "Left")
+                else if (hand.handedness == "Left")
                 {
-                    UpdateHandModel(hand.landmarks, leftHandJoints, leftHandRoot);
+                    UpdateHandModel(hand.landmarks, leftHandJoints, leftHandRoot, leftHandLineRenderer);
                 }
             }
         }
@@ -127,40 +133,33 @@ public class HandDataReceiver : MonoBehaviour
         }
     }
 
-    private void UpdateHandModel(Landmark[] landmarks, Transform[] handJoints, Transform handRoot)
+    private void UpdateHandModel(Landmark[] landmarks, Transform[] handJoints, Transform handRoot, LineRenderer lineRenderer)
     {
-        for (int i = 0; i < landmarks.Length && i < handJoints.Length; i++)
+        if (landmarks.Length != handJoints.Length)
         {
-            Vector3 localPosition = new Vector3(landmarks[i].x, landmarks[i].y, landmarks[i].z) - handRoot.position;
-            Vector3 adjustedPosition = Vector3.Scale(localPosition, scale) + offset;
-            
-            handJoints[i].localPosition = adjustedPosition;
+            Debug.LogError("Landmark and joint array lengths do not match.");
+            return;
+        }
 
-            //Rotate to look at specific node depending on index
-            if (i < 5)
-            {
-                if (i > 0)
-                {
-                    Vector3 direction = handJoints[i - 1].position - handJoints[i].position;
-                    handJoints[i].rotation = Quaternion.LookRotation(direction, handRoot.up);
-                    lineRenderer.SetPosition(i, handJoints[i].position);
-                }
-            }
-            else
-            {
-                // Calculate index of the node to look back at
-                int lookBackIndex = i % 5;
+        for (int i = 0; i < landmarks.Length; i++)
+        {
+            Vector3 position = new Vector3(landmarks[i].x, landmarks[i].y, landmarks[i].z);
+            handJoints[i].localPosition = Vector3.Scale(position, scale) + offset;
 
-                // Calculate direction to the node to look back at
-                Vector3 direction = handJoints[lookBackIndex].position - handJoints[i].position;
-                handJoints[i].rotation = Quaternion.LookRotation(direction, handRoot.up);
-                lineRenderer.SetPosition(i, handJoints[i].position);
+            // Apply rotation
+            if (i > 0)
+            {
+                Vector3 direction = handJoints[i - 1].position - handJoints[i].position;
+                handJoints[i].rotation = Quaternion.LookRotation(direction, Vector3.up);
             }
         }
+        //render line according to path[]
+        for (int j=0; j<path.Length; j++){
+            lineRenderer.SetPosition(j, handJoints[path[j]].position);
+        }
+        
     }
-    private void UpdateLineRendererPositions(){
 
-    }
     private void OnApplicationQuit()
     {
         stopThread = true;
