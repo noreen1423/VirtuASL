@@ -162,7 +162,7 @@ for t in threads:
 try:
     while True:
         with lock:
-            if 0 in frame_queue:
+            if 0 in frame_queue and tracking_active:
                 frame0 = frame_queue[0]
                 frame0 = cv2.resize(frame0, (640, 480))
                 results0 = hands.process(cv2.cvtColor(frame0, cv2.COLOR_BGR2RGB))
@@ -177,10 +177,13 @@ try:
                 
         # Read and process data from Arduino
         if arduino_serial.inWaiting() > 0:
-            tracking_active = False  # Turn off tracking when Arduino sends something
             arduino_data = arduino_serial.readline().decode('utf-8').rstrip()
             print(arduino_data)
-            
+            if arduino_data == "controls off!":
+                tracking_active = False
+            elif arduino_data == "controls on!":
+                tracking_active = True
+
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
@@ -193,5 +196,3 @@ finally:
     client_socket.close()
     server_socket.close()
     arduino_serial.close()  # Close the serial connection to Arduino
-
-
