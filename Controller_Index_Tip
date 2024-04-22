@@ -2,6 +2,7 @@ import cv2
 import mediapipe as mp
 import sys
 import serial
+import time
 
 # Initialize MediaPipe Hands.
 mp_hands = mp.solutions.hands
@@ -15,6 +16,12 @@ cap = cv2.VideoCapture(0)
 
 # Flag to indicate whether hand tracking is active
 tracking_active = True
+
+# Timestamp for the last received data from Arduino
+last_arduino_data_time = time.time()
+
+# Time interval (in seconds) to wait before turning tracking back on
+tracking_reenable_interval = 5  # Adjust as needed
 
 while cap.isOpened():
     ret, frame = cap.read()
@@ -31,8 +38,8 @@ while cap.isOpened():
                 # Assuming you want to track the index finger tip.
                 index_tip = hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP]
                 # Output the coordinates.
-                sys.stdout.write(f'{index_tip.x},{index_tip.y},{index_tip.z}\n')
-                sys.stdout.flush()
+                #sys.stdout.write(f'{index_tip.x},{index_tip.y},{index_tip.z}\n')
+                #sys.stdout.flush()
 
         # For debugging, show the frame with drawn landmarks.
         if results.multi_hand_landmarks:
@@ -44,8 +51,13 @@ while cap.isOpened():
     # Read and process data from Arduino
     if arduino_serial.inWaiting() > 0:
         tracking_active = False  # Turn off tracking when Arduino sends something
+        last_arduino_data_time = time.time()
         arduino_data = arduino_serial.readline().decode('utf-8').rstrip()
         print(arduino_data)
+
+    # Check if it's time to re-enable tracking
+    if not tracking_active and time.time() - last_arduino_data_time > tracking_reenable_interval:
+        tracking_active = True
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
